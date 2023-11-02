@@ -31,5 +31,6 @@ func NewClient(topic string) (*kgo.Client, error) {
 		log.Fatal("failed to create kafka client", zap.Error(err))
 		return nil, err
 	}
+	log.Info("create kafka client success")
 	return kafkaClient, nil
 }

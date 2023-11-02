@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 
-	"github.com/ddl-hust/pied-piper/common/config"
 	"github.com/ddl-hust/pied-piper/common/kafka"
 	"github.com/ddl-hust/pied-piper/common/log"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -37,12 +38,15 @@ type Transfer struct {
 
 var (
 	PEPE_PAIR_ADDRESS = "0xa43fe16908251ee70ef74718545e4fe6c5ccec9f"
+	PEPE_ADDRESS      = "0x6982508145454Ce325dDbE47a25d4ec3d2311933"
+	AMOUNT_THRESHOLD  = 10000
 )
 
 func main() {
 
-	cfg := config.GetConf()
-	client, err := ethclient.Dial(fmt.Sprintf("https://ethereum-mainnet.s.chainbase.online/v1/%s", cfg.APIKey))
+	// cfg := config.GetConf()
+	// client, err := ethclient.Dial(fmt.Sprintf("https://ethereum-mainnet.s.chainbase.online/v1/%s", cfg.APIKey))
+	client, err := ethclient.Dial(fmt.Sprintf("http://localhost:8545"))
 	if err != nil {
 		log.Error("failed to dial", zap.Error(err))
 	}
@@ -63,14 +67,34 @@ func main() {
 				log.Error("failed to unmarshal", zap.Error(err))
 
 			}
-			if num, _ := strconv.Atoi(transfer.Value); num > 10000 &&
-				transfer.To == PEPE_PAIR_ADDRESS {
-				log.Info(fmt.Sprintf("timestamp:%s,block number:%d,hash: %s, from: %s, to: %s, value: %s", transfer.BlockTime, transfer.BlockNumber, transfer.Hash, transfer.From, transfer.To, transfer.Value))
-
+			if num, _ := strconv.Atoi(transfer.Value); num < AMOUNT_THRESHOLD ||
+				transfer.To != PEPE_PAIR_ADDRESS {
+				continue
 			}
-			// log.Info(fmt.Sprintf("hash: %s, from: %s, to: %s, value: %s", transfer.Hash, transfer.From, transfer.To, transfer.Value))
+			log.Info(fmt.Sprintf("timestamp:%s,block number:%d,hash: %s, from: %s, to: %s, value: %s", transfer.BlockTime, transfer.BlockNumber, transfer.Hash, transfer.From, transfer.To, transfer.Value))
 
+			// send tx
+			cmd := exec.Command("zsh", "-c", "cast rpc anvil_impersonateAccount $USER")
+			_ = cmd.Run()
+
+			cmd = exec.Command("zsh", "-c", "cast send $ROUTER --unlocked --from $USER 0x3593564c000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000653c7bf30000000000000000000000000000000000000000000000000000000000000002090c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000de0b6b3a764000000000000000000000000000000000000000000000547a9c189cb7587083746db00000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000020000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000de0b6b3a7640000")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				log.Error("failed to send tx", zap.Error(err))
+			}
+			os.Exit(1)
 		}
 
 	}
+}
+
+func filter(transfer *Transfer) bool {
+
+	if num, _ := strconv.Atoi(transfer.Value); num < AMOUNT_THRESHOLD ||
+		transfer.To != PEPE_PAIR_ADDRESS {
+		return true
+	}
+	return false
 }
